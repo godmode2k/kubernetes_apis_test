@@ -1,0 +1,364 @@
+
+Kubernetes Installation
+================
+hjkim, 2022.06.17
+
+
+--------------------------------------------------
+kubernetes requirements
+--------------------------------------------------
+ - A compatible Linux host. The Kubernetes project provides generic instructions for
+   Linux distributions based on Debian and Red Hat, and those distributions without a package manager.
+ - 2 GB or more of RAM per machine (any less will leave little room for your apps).
+ - 2 CPUs or more.
+ - Full network connectivity between all machines in the cluster (public or private network is fine).
+ - Unique hostname, MAC address, and product_uuid for every node. See here for more details.
+ - Certain ports are open on your machines.  ($ nc 127.0.0.1 6443)
+ - Swap disabled. You MUST disable swap in order for the kubelet to work properly.
+
+
+
+--------------------------------------------------
+--------------------------------------------------
+kubectl get nodes -o wide
+kubectl get deployment -o wide
+kubectl get pods --all-namespaces
+kubectl get service --all-namespaces
+
+kubectl create deployment test-img --image=(Docker Private Registry IP):port/test_img:1.0
+kubectl expose deployment test-img --type=LoadBalancer --name=my-service --port=80 --target-port=8080
+kubectl expose deployment test-img --type=NodePort --name=my-service --port=80 --target-port=8080
+kubectl get deployments -o wide
+kubectl get pods -o wide
+kubectl get service
+kubectl describe services <name>
+kubectl delete deployment <name>
+kubectl delete services <name>
+
+kubectl logs -f <pod name>
+kubectl describe pod <pod name>
+
+
+
+--------------------------------------------------
+Docker installation
+ - https://docs.docker.com/engine/install/
+--------------------------------------------------
+$ sudo apt-get update
+
+$ sudo apt-get install \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+
+$ sudo mkdir -p /etc/apt/keyrings
+
+$ curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+$ echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+$ sudo apt-get update
+
+$ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+$ sudo docker run hello-world
+
+
+
+--------------------------------------------------
+Kubernetes installation
+ - https://kubernetes.io/
+ - https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+ - https://kubernetes.io/docs/setup/production-environment/container-runtimes/
+ - https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#tabs-pod-install-6
+--------------------------------------------------
+$ sudo apt-get update
+$ sudo apt-get install -y apt-transport-https ca-certificates curl
+
+$ sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+
+$ echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+$ sudo apt-get update
+$ sudo apt-get install -y kubectl kubeadm kubelet
+$ sudo apt-mark hold kubelet kubeadm kubectl
+
+$ sudo swapoff -a && sudo sed -i '/swap/s/^/#/' /etc/fstab​
+
+$ sudo cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+$ sudo modprobe overlay
+$ sudo modprobe br_netfilter
+
+# sysctl params required by setup, params persist across reboots
+$ sudo cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+# Apply sysctl params without reboot
+$ sudo sysctl --system
+
+$ systemctl start kubelet && systemctl enable kubelet
+
+// To configure this for Docker, set native.cgroupdriver=systemd.
+// https://github.com/kubernetes/kubeadm/issues/1394
+$ sudo mkdir /etc/docker
+$ cat <<EOF | sudo tee /etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+
+$ sudo systemctl enable docker 
+$ sudo systemctl daemon-reload 
+$ sudo systemctl restart docker
+
+$ sudo kubeadm reset
+// master ip: 10.244.0.4, network cidr: 10.244.0.0/24, netmastk: 255.255.255.0, gateway: 10.244.0.1
+$ sudo kubeadm init --apiserver-advertise-address 10.244.0.4 --pod-network-cidr=10.244.0.0/24
+
+// Error {
+[init] Using Kubernetes version: v1.24.2
+[preflight] Running pre-flight checks
+error execution phase preflight: [preflight] Some fatal errors occurred:
+        [ERROR CRI]: container runtime is not running: output: E0619 13:44:20.925374    1299 remote_runtime.go:925] "Status from runtime service failed" err="rpc error: code = Unimplemented desc = unknown service runtime.v1alpha2.RuntimeService"
+time="2022-06-19T13:44:20Z" level=fatal msg="getting status of runtime: rpc error: code = Unimplemented desc = unknown service runtime.v1alpha2.RuntimeService"
+, error: exit status 1
+[preflight] If you know what you are doing, you can make a check non-fatal with `--ignore-preflight-errors=...`
+To see the stack trace of this error execute with --v=5 or higher
+
+// SEE:
+// - https://stackoverflow.com/questions/72504257/i-encountered-when-executing-kubeadm-init-error-issue
+// - https://kubernetes.io/docs/setup/production-environment/container-runtimes/
+
+$ sudo rm /etc/containerd/config.toml
+or
+// remove "cri" in config.toml
+$ sudo vim /etc/containerd/config.toml
+...
+#disabled_plugins = ["cri"]
+# fix: [ERROR CRI]: container runtime is not running: output: E0619
+# remove "cri"
+disabled_plugins = []
+...
+
+$ systemctl restart containerd
+}
+
+// Copy log message
+...
+kubeadm join 10.244.0.4:6443 --token eefp4c.l0uouusy8e6uy4e3 \
+        --discovery-token-ca-cert-hash sha256:762ab2f860f5b6d94198f51cebea01cbd80ea26d14a47510b930715220e71235
+
+// To start using your cluster, you need to run the following as a regular user:
+$ mkdir -p $HOME/.kube
+$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+//$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+// Alternatively, if you are the root user, you can run:
+$ export KUBECONFIG=/etc/kubernetes/admin.conf
+
+// Error {
+The connection to the server localhost:8080 was refused - did you specify the right host or port?
+
+// root home directory
+$ mkdir -p $HOME/.kube
+$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+}
+
+
+ 
+Network add-on (Flannel) 
+$ sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+//$ sudo kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+
+
+// communication with master from another one
+// $ scp root@<Master Node IP>:/etc/kubernetes/admin.conf .
+// $ sudo kubectl --kubeconfig ./admin.conf get nodes
+// API
+// $ scp root@<Master Node IP>:/etc/kubernetes/admin.conf .
+// $ sudo kubectl --kubeconfig ./admin.conf proxy
+
+
+// token list
+// $ sudo kubeadm token list
+
+// creates token
+// $ sudo kubeadm token create
+// $ sudo kubeadm token create --print-join-command
+
+
+
+--------------------------------------------------
+Worker Node
+--------------------------------------------------
+$ sudo kubeadm join 10.244.0.4:6443 --token eefp4c.l0uouusy8e6uy4e3 \
+        --discovery-token-ca-cert-hash sha256:762ab2f860f5b6d94198f51cebea01cbd80ea26d14a47510b930715220e71235
+
+// Error {
+[preflight] Running pre-flight checks
+error execution phase preflight: [preflight] Some fatal errors occurred:
+        [ERROR CRI]: container runtime is not running: output: E0619 14:18:43.273882    5229 remote_runtime.go:925] "Status from runtime service failed" err="rpc error: code = Unimplemented desc = unknown service runtime.v1alpha2.RuntimeService"
+time="2022-06-19T14:18:43Z" level=fatal msg="getting status of runtime: rpc error: code = Unimplemented desc = unknown service runtime.v1alpha2.RuntimeService"
+, error: exit status 1
+[preflight] If you know what you are doing, you can make a check non-fatal with `--ignore-preflight-errors=...`
+To see the stack trace of this error execute with --v=5 or higher
+
+// SEE:
+// - https://stackoverflow.com/questions/72504257/i-encountered-when-executing-kubeadm-init-error-issue
+// - https://kubernetes.io/docs/setup/production-environment/container-runtimes/
+
+$ sudo rm /etc/containerd/config.toml
+or
+// remove "cri" in config.toml
+$ sudo vim /etc/containerd/config.toml
+...
+#disabled_plugins = ["cri"]
+# fix: [ERROR CRI]: container runtime is not running: output: E0619
+# remove "cri"
+disabled_plugins = []
+...
+
+$ systemctl restart containerd
+}
+
+
+
+--------------------------------------------------
+Kubernetes: pull from Docker Private Registry
+--------------------------------------------------
+(Docker Private Registry Server)
+$ sudo docker pull registry:latest
+$ sudo docker run -d --restart=always -p 5000:5000 registry:latest
+$ sudo docker pull ubuntu:20.04
+$ sudo docker tag ubuntu (Docker Private Registry IP):Port/test_ubuntu:20.04
+$ sudo docker push (Docker Private Registry IP):Port/test_ubuntu:20.04
+
+// test
+$ sudo docker pull (Docker Private Registry IP):Port/test_ubuntu:20.04
+
+// checks runtime (Docker, Containerd, ...)
+$ sudo kubectl get nodes -o wide
+
+// for Docker: http: server gave HTTP response to HTTPS client
+(Master, Wokrer nodes)
+$ sudo vim /etc/docker/daemon.json
+add:
+{
+    "insecure-registries": ["(Docker Private Registry IP):Port"]
+}
+$ sudo service docker restart
+
+or
+
+$ sudo vim /etc/default/docker
+...
+DOCKER_OPTS="--insecure-registry (Docker Private Registry IP):Port"
+...
+$ sudo service docker restart
+
+
+// for Containerd: http: server gave HTTP response to HTTPS client
+(Master, Wokrer nodes)
+$ sudo vim /etc/containerd/config.toml
+add:
+...
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors]
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."(Docker Private Registry IP):Port"]
+  endpoint = ["http://(Docker Private Registry IP):Port"]
+...
+$ sudo systemctl restart containerd
+
+$ sudo kubectl create deployment test_ubuntu --image=(Docker Private Registry IP):Port/test_ubuntu:20.04
+$ sudo kubectl get deployments
+$ sudo kubectl get pods -o wide
+
+
+
+--------------------------------------------------------
+Kubernetes: Change Master/Worker Node IP Address
+--------------------------------------------------------
+(master node)
+$ sudo systemctl stop kubelet
+$ sudo service stop docker
+$ sudo ps -ef | grep kube*
+$ sudo kill -9 <kube* process: kube-schedule, kube-...>
+
+(master node)
+$ sudo mv /etc/kubernetes /etc/kubernetes.old
+$ sudo mv /var/lib/kubelet /var/lib/kubelet.old
+
+(master node)
+$ sudo mkdir /etc/kubernetes
+$ sudo cp -a -r /etc/kubernetes.old/pki /etc/kubernetes
+$ sudo rm -f /etc/kubernetes/pki/apiserver.*
+$ sudo rm -f /etc/kubernetes/pki/etcd/peer.*
+
+(master node)
+$ sudo service docker start
+
+(master node)
+// keep etcd data
+$ sudo kubeadm init --ignore-preflight-errors=DirAvailable--var-lib-etcd
+
+// copy results
+{----------
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join (Master Node IP):6443 --token xxxxxxxxxxxxx \
+        --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+----------}
+
+(master node)
+$ sudo cp /etc/kubernetes/admin.conf ~/.kube/config
+
+(worker node)
+$ sudo kubeadm reset
+
+(copied results above)
+$ sudo kubeadm join (Master Node IP):6443 --token xxxxxxxxxxxxx \
+        --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+or recreates token (goto Step 10)
+
+(master node)
+// if you need to rejoin
+$ sudo kubeadm token create --print-join-command
+
+
+
+
+
+
+
+__EOF__

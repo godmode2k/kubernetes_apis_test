@@ -1,0 +1,55 @@
+# Dockerfile
+# hjkim, 2022.05.25
+
+
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+
+RUN apt-get update && apt-get install -y \
+  git openjdk-8-jdk-headless default-jre \
+  tomcat9 tomcat9-admin \
+  apache2
+
+# TEST
+RUN apt-get install -y \
+  libapache2-mod-php php7.4 php7.4-common php7.4-curl php7.4-gmp php7.4-json php7.4-mysql php7.4-readline
+
+#RUN apt-get install -y mysql-server
+#RUN apt-get install -y mariadb-server
+
+
+
+# config: apache2
+#COPY cloud_service/default/apache2/* /etc/apache2
+
+
+# config: tomcat9
+#COPY cloud_service/default/tomcat9/* /<tomcat9 path: /usr/share/tomcat9/bin>
+#COPY cloud_service/default/tomcat9/* /<tomcat9 path: /usr/share/tomcat9/conf>
+# edit default webapps root path
+#COPY cloud_service/default/tomcat9/* /<tomcat9 path: /var/lib/tomcat9/conf>
+
+RUN ln -s /var/lib/tomcat9/conf /usr/share/tomcat9
+RUN ln -s /var/lib/tomcat9/logs /usr/share/tomcat9
+# Tomcat9 shutdown port
+RUN sed -i -e 's/<Server\ port=\"-1\"\ shutdown=\"SHUTDOWN\">/<Server\ port=\"8081\"\ shutdown=\"SHUTDOWN\">/g' /usr/share/tomcat9/conf/server.xml
+
+# Add: /usr/share/tomcat9/conf/server.xml
+# <Context docBase="<project-name>" path="/" reloadable="true" source="org.eclipse.jst.jee.server:project-name"/>
+#RUN sed -i -e '0,/unpackWARs=\"true\"\ autoDeploy=\"true\">/!b;//a\<Context\ docBase=\"PROJECT-NAME\"\ path=\"/\"\ reloadable=\"true\"\ source=\"org.eclipse.jst.jee.server:PROJECT-NAME\"/>' /usr/share/tomcat9/conf/server.xml
+#COPY ./PROJECT-NAME.war /usr/share/tomcat9/webapps/
+
+
+#COPY ./PROJECT-NAME.sql /root
+#RUN service mysql restart && mysql -u root --password="" < /root/PROJECT-NAME.sql
+
+
+# run apache2, tomcat9 (without systemctl here)
+#ENTRYPOINT bash
+#ENTRYPOINT /usr/share/tomcat9/bin/startup.sh && service apache2 restart
+#ENTRYPOINT /usr/share/tomcat9/bin/startup.sh && service mysql restart && apachectl -D FOREGROUND
+ENTRYPOINT /usr/share/tomcat9/bin/startup.sh && apachectl -D FOREGROUND
+
