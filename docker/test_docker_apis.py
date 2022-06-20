@@ -77,7 +77,7 @@ import docker
 # req_json = '{ "request": {"req": "container_remove", "container_id": "..."} }'
 #
 
-request_container_service( req_json )
+#request_container_service( req_json )
 
 
 # ---------------------------------------------------------
