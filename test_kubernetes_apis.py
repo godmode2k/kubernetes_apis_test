@@ -349,6 +349,31 @@ def create_ingress():
     )
 """
 
+def delete_container(deployment_name, service_name):
+    print( "delete_container()" )
+
+    apps_v1_api = client.AppsV1Api()
+    core_v1_api = client.CoreV1Api()
+
+    delete_options = client.V1DeleteOptions(
+        propagation_policy = "Foreground", grace_period_seconds = 5
+    )
+
+    # delete deployment
+    ret_deployment = apps_v1_api.delete_namespaced_deployment(
+        namespace = DEFAULT_NAMESPACE,
+        name = deployment_name,
+        body = delete_options
+    )
+
+    # delete service
+    ret_service = core_v1_api.delete_namespaced_service(
+        namespace = DEFAULT_NAMESPACE,
+        name = service_name,
+        body = delete_options
+    )
+
+    return ret_deployment, ret_service
 
 
 if __name__ == "__main__":
@@ -379,5 +404,20 @@ if __name__ == "__main__":
 
         if e.status == 422:
             print( "Unprocessable Entity, 422" )
+
+    try:
+        deployment_name = DEPLOYMENT_NAME
+        service_name = DEPLOYMENT_SERVICE_NAME
+
+        # NOTE: NULL For DELETE ALL
+        #deployment_name = ""
+        #service_name = ""
+
+        ret = delete_container( deployment_name, service_name )
+        print( ret )
+    except Exception as e:
+        traceback.print_exc()
+        print( "error = ", e )
+        #print( "error code = ", e.status )
     """
 
