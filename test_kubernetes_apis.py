@@ -94,7 +94,7 @@ DEPLOYMENT_PORT__CONTAINER_DB = int(3306)
 
 
 def node_list():
-    print("Listing nodes with their IPs:")
+    print("node_list()")
 
     res = []
 
@@ -119,7 +119,7 @@ def node_list():
     return res
 
 def deployment_list():
-    print("Listing deployments with their IPs:")
+    print("deployment_list()")
 
     res = []
 
@@ -139,7 +139,7 @@ def deployment_list():
     return res
 
 def pod_list():
-    print("Listing pods with their IPs:")
+    print("pod_list()")
 
     res = []
 
@@ -165,7 +165,7 @@ def pod_list():
     return res
 
 def service_list():
-    print("Listing services with their IPs:")
+    print("service_list()")
 
     res = []
 
@@ -200,7 +200,7 @@ def service_list():
     return res
 
 def list_all():
-    print("Listing all with their IPs:")
+    print("list_all()")
 
     _node_list = node_list()
     _deployment_list = deployment_list()
