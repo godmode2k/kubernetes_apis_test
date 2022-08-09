@@ -1,0 +1,113 @@
+
+iSCSI test
+ - hjkim, 2022.07.19
+
+
+OS: Ubuntu 20.04 LTS
+Device: file (VFS)
+
+------------------------------------------
+Target (SCSI Storage)
+------------------------------------------
+// 1 GiB image file
+$ dd if=/dev/zero of=/tmp/test.img bs=1024k count=1000
+
+//$ sudo losetup /dev/loop0 ./test.img
+
+// tgt conf for new device
+(CREATE)
+/etc/tgt/conf.d/test_img.conf
+
+<target iqn.2022-07.test.com:lun1>
+        #backing-store /dev/loop0
+        backing-store /tmp/test.img
+        initiator-address <Initiator IP>
+        incominguser iscsi_test iscsi_test
+        outgoinguser iscsi_test2 iscsi_test2
+</target>
+
+$ sudo systemctl restart tgt
+$ sudo tgtadm --mode target --op show
+
+
+------------------------------------------
+Initiator (Connect to iSCSI Target Device)
+------------------------------------------
+$ sudo apt-get install open-iscsi
+$ sudo iscsiadm -m discovery -t st -p <Target Host IP>
+<Target Host IP>:3260,1 iqn.2022-07.test.com:lun1
+
+$ sudo vim /etc/iscsi/initiatorname.iscsi
+(ADD)
+InitiatorName=<Target Host IP>:3260,1 iqn.2022-07.test.com:lun1
+
+/*
+# DO NOT USE THIS
+$ vim /etc/iscsi/nodes/iqn.2022-07.test.com\:lun1/<Target Host IP>,3260,1/default
+
+(ADD or MODIFY)
+#node.startup = manual
+node.startup = automatic
+
+#node.session.auth.authmethod = None
+node.session.auth.authmethod = CHAP
+
+node.session.auth.username = iscsi_test // incominguser
+node.session.auth.password = iscsi_test // incominguser
+node.session.auth.username_in = iscsi_test2 // incominguser
+node.session.auth.password_in = iscsi_test2 // incominguser
+*/
+
+$ vim /etc/iscsi/iscsid.conf
+(MODIFY)
+#node.startup = manual
+node.startup = automatic
+
+#node.session.auth.authmethod = None
+node.session.auth.authmethod = CHAP
+
+node.session.auth.username = iscsi_test // incominguser
+node.session.auth.password = iscsi_test // incominguser
+
+# DO NOT USE THIS
+#node.session.auth.username_in = iscsi_test2 // incominguser
+#node.session.auth.password_in = iscsi_test2 // incominguser
+
+$ sudo systemctl restart open-iscsi iscsid
+
+//$ sudo iscsiadm -m node --login
+
+$ sudo iscsiadm -m session -o show
+tcp: [3] <Target Host IP>:3260,1 iqn.2022-07.test.com:lun1 (non-flash)
+
+// Creates partition and mount
+$ sudo fdisk -l
+$ sudo fdisk /dev/sde
+$ sudo mkfs.ext4 /dev/sde1
+$ sudo mkdir /mnt/test_iscsi
+$ sudo mount -t ext4 /dev/sde1 /mnt/test_iscsi/
+
+
+------------------------------------------
+delete
+------------------------------------------
+Reference:
+ - https://helpdesk.kaseya.com/hc/en-gb/articles/4407512021521-Remove-ISCSI-sessions-using-the-Linux-command-line
+ - https://bugzilla.redhat.com/show_bug.cgi?id=797079
+
+$ sudo iscsiadm -m session -o show
+tcp: [4] <Target Host IP>:3260,1 iqn.2022-07.test.com:lun1 (non-flash)
+
+$ sudo iscsiadm -m node -p <Target Host IP>:3260 --logout
+Logging out of session [sid: 4, target: iqn.2022-07.test.com:lun1, portal: <Target Host IP>,3260]
+Logout of [sid: 4, target: iqn.2022-07.test.com:lun1, portal: <Target Host IP>,3260] successful.
+
+$ sudo iscsiadm -m session -o show
+iscsiadm: No active sessions.
+
+
+
+
+
+
+__EOF__

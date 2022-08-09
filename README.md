@@ -8,6 +8,7 @@ Summary
 > Change Node IP Address </br>
 > Pull From Docker Private Registry </br>
 > Kubernetes, Docker APIs test </br>
+> iSCSI test </br>
 
 
 Environment
