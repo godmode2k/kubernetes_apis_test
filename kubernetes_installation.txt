@@ -41,6 +41,29 @@ kubectl describe pod <pod name>
 
 
 --------------------------------------------------
+--------------------------------------------------
+// ubuntu 20.04
+// gateway
+$ ip route | grep default
+
+// static
+$ sudo vim /etc/netplan/00-installer-config.yaml
+# This is the network config written by 'subiquity'
+network:
+  ethernets:
+    enp0s...:
+      dhcp4: no
+      addresses:
+        - 10.0.2.4/24
+      gateway4: 10.0.2.2
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+  version: 2
+$ sudo netplan apply
+
+
+
+--------------------------------------------------
 Docker installation
  - https://docs.docker.com/engine/install/
 --------------------------------------------------
@@ -98,9 +121,9 @@ $ sudo modprobe br_netfilter
 
 # sysctl params required by setup, params persist across reboots
 $ sudo cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
-net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
-net.ipv4.ip_forward                 = 1
+net.ipv4.ip_forward = 1
 EOF
 
 # Apply sysctl params without reboot
@@ -127,8 +150,8 @@ $ sudo systemctl daemon-reload
 $ sudo systemctl restart docker
 
 $ sudo kubeadm reset
-// master ip: 10.244.0.4, network cidr: 10.244.0.0/24, netmastk: 255.255.255.0, gateway: 10.244.0.1
-$ sudo kubeadm init --apiserver-advertise-address 10.244.0.4 --pod-network-cidr=10.244.0.0/24
+// master ip: 10.0.2.4, network cidr: 10.244.0.0/24, netmastk: 255.255.255.0, gateway: 10.0.2.2
+$ sudo kubeadm init --apiserver-advertise-address 10.0.2.4 --pod-network-cidr=10.244.0.0/16
 
 // Error {
 [init] Using Kubernetes version: v1.24.2
@@ -145,6 +168,7 @@ To see the stack trace of this error execute with --v=5 or higher
 // - https://kubernetes.io/docs/setup/production-environment/container-runtimes/
 
 $ sudo rm /etc/containerd/config.toml
+$ sudo containerd config default > /etc/containerd/config.toml
 or
 // remove "cri" in config.toml
 $ sudo vim /etc/containerd/config.toml
@@ -203,11 +227,21 @@ $ sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/
 // $ sudo kubeadm token create --print-join-command
 
 
+// remove context
+//https://stackoverflow.com/questions/37016546/kubernetes-how-do-i-delete-clusters-and-contexts-from-kubectl-config
+//$ kubectl config get-contexts
+//CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+//*         kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+//$ kubectl config delete-context kubernetes-admin@kubernetes
+//warning: this removed your active context, use "kubectl config use-context" to select a different one
+//deleted context kubernetes-admin@kubernetes from /root/.kube/config
+
+
 
 --------------------------------------------------
 Worker Node
 --------------------------------------------------
-$ sudo kubeadm join 10.244.0.4:6443 --token eefp4c.l0uouusy8e6uy4e3 \
+$ kubeadm join 10.244.0.4:6443 --token eefp4c.l0uouusy8e6uy4e3 \
         --discovery-token-ca-cert-hash sha256:762ab2f860f5b6d94198f51cebea01cbd80ea26d14a47510b930715220e71235
 
 // Error {
@@ -224,6 +258,7 @@ To see the stack trace of this error execute with --v=5 or higher
 // - https://kubernetes.io/docs/setup/production-environment/container-runtimes/
 
 $ sudo rm /etc/containerd/config.toml
+$ sudo containerd config default > /etc/containerd/config.toml
 or
 // remove "cri" in config.toml
 $ sudo vim /etc/containerd/config.toml
@@ -236,6 +271,14 @@ disabled_plugins = []
 
 $ systemctl restart containerd
 }
+
+
+// Worker node (copied from Master node)
+//$ sudo vim /run/flannel/subnet.env
+//FLANNEL_NETWORK=10.244.0.0/16
+//FLANNEL_SUBNET=10.244.0.1/24
+//FLANNEL_MTU=1450
+//FLANNEL_IPMASQ=true
 
 
 
@@ -275,6 +318,9 @@ $ sudo service docker restart
 
 // for Containerd: http: server gave HTTP response to HTTPS client
 (Master, Wokrer nodes)
+create: if not exist or an empty
+$ sudo containerd config default > /etc/containerd/config.toml
+
 $ sudo vim /etc/containerd/config.toml
 add:
 ...
@@ -295,7 +341,7 @@ Kubernetes: Change Master/Worker Node IP Address
 --------------------------------------------------------
 (master node)
 $ sudo systemctl stop kubelet
-$ sudo service stop docker
+$ sudo service docker stop
 $ sudo ps -ef | grep kube*
 $ sudo kill -9 <kube* process: kube-schedule, kube-...>
 
