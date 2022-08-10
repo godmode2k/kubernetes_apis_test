@@ -171,7 +171,7 @@ DPORT = "30000:32767"
 chain = iptc.Chain( iptc.Table(iptc.Table.NAT), "PREROUTING" )
 rule = iptc.Rule()
 rule.protocol = "tcp"
-rule.dst = DST_IP # "10.0.2.4"
+#rule.dst = DST_IP # "10.0.2.4"
 rule.match = rule.create_match( "tcp" )
 rule.match.dport = DPORT # "30000:32767"
 rule.target = rule.create_target( "DNAT" )
@@ -234,10 +234,10 @@ rule.protocol = "tcp"
 #rule.dst = ""
 match = rule.create_match( "tcp" )
 match.dport = DPORT # "30000:32767"
-rule.add_match( match )
+#rule.add_match( match )
 match = rule.create_match( "state" )
 match.state = "NEW,RELATED,ESTABLISHED"
-rule.add_match( match )
+#rule.add_match( match )
 rule.target = rule.create_target( "ACCEPT" )
 
 chain.insert_rule( rule )
@@ -268,7 +268,7 @@ DPORT = "32579"
 chain = iptc.Chain( iptc.Table(iptc.Table.NAT), "PREROUTING" )
 rule = iptc.Rule()
 rule.protocol = "tcp"
-rule.dst = DST_IP
+#rule.dst = DST_IP
 rule.match = rule.create_match( "tcp" )
 rule.match.dport = DPORT
 rule.target = rule.create_target( "DNAT" )
@@ -318,10 +318,10 @@ rule.protocol = "tcp"
 #rule.dst = ""
 match = rule.create_match( "tcp" )
 match.dport = DPORT
-rule.add_match( match )
+#rule.add_match( match )
 match = rule.create_match( "state" )
 match.state = "NEW,RELATED,ESTABLISHED"
-rule.add_match( match )
+#rule.add_match( match )
 rule.target = rule.create_target( "ACCEPT" )
 
 chain.insert_rule( rule )
@@ -353,7 +353,7 @@ def add_rule(SRC_IP, DST_IP, DPORT, INIT = False):
     chain = iptc.Chain( iptc.Table(iptc.Table.NAT), "PREROUTING" )
     rule = iptc.Rule()
     rule.protocol = "tcp"
-    rule.dst = DST_IP
+    #rule.dst = DST_IP
     rule.match = rule.create_match( "tcp" )
     rule.match.dport = DPORT
     rule.target = rule.create_target( "DNAT" )
@@ -407,17 +407,73 @@ def add_rule(SRC_IP, DST_IP, DPORT, INIT = False):
     rule.protocol = "tcp"
     match = rule.create_match( "tcp" )
     match.dport = DPORT
-    rule.add_match( match )
+    #rule.add_match( match )
+
     match = rule.create_match( "state" )
     match.state = "NEW,RELATED,ESTABLISHED"
-    rule.add_match( match )
+    #rule.add_match( match )
     rule.target = rule.create_target( "ACCEPT" )
 
     chain.insert_rule( rule )
 
-# TODO:
-def delete_rule(DST_IP, DPORT):
-    pass
+def delete_rule(DPORT):
+    chain_list = [
+            [iptc.Table.NAT, "PREROUTING"],
+            [iptc.Table.NAT, "POSTROUTING"],
+            [iptc.Table.FILTER, "INPUT"],
+            [iptc.Table.FILTER, "FORWARD"]
+    ]
+
+    for chain_name in chain_list:
+        #print( "chain: ", chain_name[0], chain_name[1] )
+        chain = iptc.Chain( iptc.Table(chain_name[0]), chain_name[1] )
+        for rule in chain.rules:
+            for match in rule.matches:
+                #print( str(chain_name) + ": ", iptc.easy.decode_iptc_rule(rule) )
+                if match.dport == str(DPORT):
+                    print( "->", chain_name + ": ", iptc.easy.decode_iptc_rule(rule) )
+                    chain.delete_rule( rule )
+                    #chain.table.commit()
+                    #chain.table.autocommit = True
+
+    '''
+    chain = iptc.Chain( iptc.Table(iptc.Table.NAT), "PREROUTING" )
+    for rule in chain.rules:
+        for match in rule.matches:
+            if match.dport == str(DPORT):
+                print( "PREROUTING: ", iptc.easy.decode_iptc_rule(rule) )
+                chain.delete_rule( rule )
+                #chain.table.commit()
+                #chain.table.autocommit = True
+
+    chain = iptc.Chain( iptc.Table(iptc.Table.NAT), "POSTROUTING" )
+    for rule in chain.rules:
+        for match in rule.matches:
+            if match.dport == str(DPORT):
+                print( "POSTROUTING: ", iptc.easy.decode_iptc_rule(rule) )
+                chain.delete_rule( rule )
+                #chain.table.commit()
+                #chain.table.autocommit = True
+
+    chain = iptc.Chain( iptc.Table(iptc.Table.FILTER), "INPUT" )
+    for rule in chain.rules:
+        for match in rule.matches:
+            if match.dport == str(DPORT):
+                print( "INPUT: ", iptc.easy.decode_iptc_rule(rule) )
+                chain.delete_rule( rule )
+                #chain.table.commit()
+                #chain.table.autocommit = True
+
+    chain = iptc.Chain( iptc.Table(iptc.Table.FILTER), "FORWARD" )
+    for rule in chain.rules:
+        for match in rule.matches:
+            if match.dport == str(DPORT):
+                print( "FORWARD: ", iptc.easy.decode_iptc_rule(rule) )
+                chain.delete_rule( rule )
+                #chain.table.commit()
+                #chain.table.autocommit = True
+    '''
+
 
 
 if __name__ == "__main__":
@@ -427,6 +483,6 @@ if __name__ == "__main__":
     DPORT = "32579"
 
     #add_rule( SRC_IP, DST_IP, DPORT )
-    #delete_rule( DST_IP, DPORT )
+    #delete_rule( DPORT )
 
 
